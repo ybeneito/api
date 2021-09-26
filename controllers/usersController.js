@@ -1,16 +1,25 @@
 const express = require('express')
 const router = express.Router()
-
 const db= require('../config/sqlite')
-
-
 const bcrypt = require("bcryptjs")
 
 // La liste des utilisateurs
 router.get('/', function (req, res) {
     try {
         db.all("SELECT * FROM Users", [], (err, users) => {
-            err ? console.error(err) : res.send(users)
+            err ? res.send(err) : res.send(users)
+        })
+    } catch (error) {
+        console.error(error)
+    }
+})
+
+// Un utilisateur par son id
+router.get("/:id", function(req, res) {
+    try {
+        const id = req.params.id
+        db.each("SELECT * FROM Users WHERE UserId = ?", id, (err, user) => {
+            err ? res.status(404).send(err) : res.status(200).send(user)
         })
     } catch (error) {
         console.error(error)
@@ -19,7 +28,6 @@ router.get('/', function (req, res) {
 
 // Ajout d'un utilisateur
 router.post('/register', async (req, res) => {
-
     try {
         var {name,mail,password} = req.body 
           // Vérification des infos entrées par l'utilisateur
@@ -27,17 +35,20 @@ router.post('/register', async (req, res) => {
             res.status(400).send("Tous les champs sont requis.")
         }
 
-        // Vérification de l'existance de l'utilisateur
-        // const oldUser = await db.run("SELECT mail from Users WHERE Users.mail = ? ", mail)
+        mail = '"' + mail + '"'
 
-        // if(oldUser) {
-        //     return res.status(409).send("L'utilisateur existe déjà")
-        // }
+        // Vérification de l'existance de l'utilisateur
+        const oldUser = await db.run("SELECT mail FROM Users WHERE mail = ? ", mail)
+        
+        if(oldUser) {
+            return res.status(409).send("L'utilisateur existe déjà")
+        }
 
         // hashage du mot de passe à l'aide de bcrypt
         var encryptedPassword = await bcrypt.hash(password, 10)
+
+        // Preparaion des datas
         name = '"' + name + '"'
-        mail = '"' + mail + '"'
         encryptedPassword = '"' + encryptedPassword + '"'
 
         // creation de la requete 
@@ -51,55 +62,38 @@ router.post('/register', async (req, res) => {
     catch (err) {
         console.error(err)
     }
-
 })
 
-// router.post('/login', async (req, res) => {
-//     try {
-//         // Récupère les valeurs entrées
-//         const { email, password } = req.body
-//         // Validation des champs requis
-//         if(!(email && password)) {
-//             res.status(400).send("Tous les champs sont requis...")
-//         }
-//         // Recherche de l'utilisateur dans la db
-//         const user = await UserModels.findOne({ email })
-//         // Vérification du mot de passe et préparation du token
-//         if(user && (await bcrypt.compare(password, user.password))){
-//             return res.status(200).send("Connecté: " + user.first_name);
-//         }
-//         // les credentials ne sont pas bons
-//         return res.status(400).send("Utilisateur non validé")
+// Modification d'un utilisateur
+router.put('/:id', async (req, res) => {
+    try {
+        var id = req.params.id 
+        var {name, mail, password} = req.body
+        var encryptedPassword = await bcrypt.hash(password, 10)
+        name = '"' + name + '"'
+        mail = '"' + mail + '"'
+        password = '"' + encryptedPassword + '"'
+        const query = `UPDATE Users SET name = ${name}, mail = ${mail}, password = ${password} WHERE UserId = ${id}`;
+        
+        await db.run(query, (err) => {
+            err ? console.error(err) : res.send("utilisateur: " + name)
+        })
+    } catch (error) {
+        console.error(error)
+    }
+})
 
-//     } catch (err) {
-//         console.error(err)
-//     }
+// Suppression d'un utilisateur 
+router.delete("/:id", async (req, res) => {
+    try {
+        var id = req.params.id;
+        await db.run(`DELETE FROM Users WHERE UserId = ${id}`, (err) => {
+            err ? console.error(err) : res.send(`Utilisateur ${id} supprimé`)
+        })
+    } catch (err) {
+        console.log(err)
+    }
+})
 
-// })
-
-// router.put('/:id', function (req, res) {
-//     if(!objectId.isValid(req.params.id)) return res.status(404).send("Utilisateur non trouvé")
-//     const updatedUser = {
-//         name: req.body.name,
-//         message: req.body.message,
-//         mail: req.body.mail
-//     }
-
-//     UserModels.findByIdAndUpdate(
-//         req.params.id,
-//         {$set: updatedUser},
-//         {new: true},
-//         (err,user) => {
-//             err ? console.error(err) : res.send(user)
-//         }
-//     )
-// })
-
-// router.delete("/:id", function (req, res) {
-//     if(!objectId.isValid(req.params.id)) return res.status(404).send("Utilisateur non trouvé")
-//     UserModel.findByIdAndDelete(req.params.id, (err,user) => {
-//         !err ? res.send("Supprimé" + user) : res.status(404).send("Utilisateur non trouvé")
-//     })
-// })
 
 module.exports = router
